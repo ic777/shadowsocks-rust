@@ -1,8 +1,9 @@
 use std::{
-    io,
+    collections::VecDeque,
+    fmt, io,
     sync::{
-        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
-        Arc,
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -10,6 +11,7 @@ use std::{
 use crate::{
     config::ServerConfig,
     context::SharedContext,
+    relay::tcprelay::EncryptedWrite,
     relay::{loadbalancing::server::LoadBalancer, socks5::Address, tcprelay::client::ServerClient},
 };
 
@@ -17,34 +19,94 @@ use futures::{Future, Stream};
 use log::{debug, error, info};
 use tokio::{
     self,
+    io::read_exact,
     timer::{Interval, Timeout},
 };
 
 struct Server {
     config: Arc<ServerConfig>,
-    elapsed: AtomicU64,
-    available: AtomicBool,
+    score: AtomicU64,
 }
 
 impl Server {
     fn new(config: ServerConfig) -> Server {
         Server {
             config: Arc::new(config),
-            elapsed: AtomicU64::new(0),
-            available: AtomicBool::new(true),
+            score: AtomicU64::new(0),
         }
     }
 
-    fn is_available(&self) -> bool {
-        self.available.load(Ordering::Acquire)
-    }
-
-    fn delay(&self) -> u64 {
-        self.elapsed.load(Ordering::Acquire)
+    fn score(&self) -> u64 {
+        self.score.load(Ordering::Acquire)
     }
 }
 
-const DEFAULT_CHECK_INTERVAL_SEC: u64 = 10;
+const MAX_LATENCY_QUEUE_SIZE: usize = 37;
+
+struct ServerLatencyInner {
+    latency_queue: VecDeque<u64>,
+}
+
+impl ServerLatencyInner {
+    fn new() -> ServerLatencyInner {
+        ServerLatencyInner {
+            latency_queue: VecDeque::with_capacity(MAX_LATENCY_QUEUE_SIZE),
+        }
+    }
+
+    fn push(&mut self, lat: u64) -> u64 {
+        self.latency_queue.push_back(lat);
+        if self.latency_queue.len() > MAX_LATENCY_QUEUE_SIZE {
+            self.latency_queue.pop_front();
+        }
+
+        self.score()
+    }
+
+    fn score(&self) -> u64 {
+        if self.latency_queue.is_empty() {
+            return u64::max_value();
+        }
+
+        let mut v = self.latency_queue.iter().cloned().collect::<Vec<u64>>();
+        v.sort();
+
+        let mid = v.len() / 2;
+        if (v.len() & 1) == 0 {
+            (v[mid - 1] + v[mid]) / 2
+        } else {
+            v[mid]
+        }
+    }
+}
+
+#[derive(Clone)]
+struct ServerLatency {
+    inner: Arc<Mutex<ServerLatencyInner>>,
+}
+
+impl ServerLatency {
+    fn new() -> ServerLatency {
+        ServerLatency {
+            inner: Arc::new(Mutex::new(ServerLatencyInner::new())),
+        }
+    }
+
+    fn push(&self, lat: u64) -> u64 {
+        let mut inner = self.inner.lock().unwrap();
+        inner.push(lat)
+    }
+}
+
+impl fmt::Debug for ServerLatency {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let inner = self.inner.lock().unwrap();
+        write!(f, "ServerLatency {{ latency: {:?} }}", inner.latency_queue)
+    }
+}
+
+const DEFAULT_CHECK_INTERVAL_SEC: u64 = 6;
+const DEFAULT_CHECK_TIMEOUT_SEC: u64 = 5;
 
 struct Inner {
     servers: Vec<Arc<Server>>,
@@ -70,32 +132,26 @@ impl Inner {
                 continue;
             }
 
-            let addr = Address::DomainNameAddress("www.example.com".to_owned(), 80);
             let context = context.clone();
+            let latency = ServerLatency::new();
 
             tokio::spawn(
-                // Check every 10 seconds
+                // Check every DEFAULT_CHECK_INTERVAL_SEC seconds
                 Interval::new(
-                    Instant::now() + Duration::from_secs(1),
+                    Instant::now() + Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                     Duration::from_secs(DEFAULT_CHECK_INTERVAL_SEC),
                 )
                 .for_each(move |_| {
                     let sc = sc.clone();
+                    let lat = latency.clone();
 
-                    let fut1 = Inner::check_delay(sc.clone(), context.clone(), addr.clone());
-                    let fut2 = Inner::check_delay(sc.clone(), context.clone(), addr.clone());
-                    let fut3 = Inner::check_delay(sc.clone(), context.clone(), addr.clone());
-
-                    fut1.join3(fut2, fut3).then(move |res| {
-                        match res {
-                            Ok((d1, d2, d3)) => {
-                                sc.available.store(true, Ordering::Release);
-                                sc.elapsed.store((d1 + d2 + d3) / 3, Ordering::Release);
-                            }
-                            Err(..) => {
-                                sc.available.store(false, Ordering::Release);
-                            }
-                        }
+                    Inner::check_delay(sc.clone(), context.clone()).then(move |res| {
+                        let score = match res {
+                            Ok(d) => lat.push(d),
+                            Err(..) => lat.push(DEFAULT_CHECK_TIMEOUT_SEC * 2 * 1000), // Penalty
+                        };
+                        debug!("updated remote server {} (score: {})", sc.config.addr(), score);
+                        sc.score.store(score, Ordering::Release);
 
                         Ok(())
                     })
@@ -110,24 +166,27 @@ impl Inner {
         }
     }
 
-    fn check_delay(
-        sc: Arc<Server>,
-        context: SharedContext,
-        addr: Address,
-    ) -> impl Future<Item = u64, Error = io::Error> {
+    fn check_delay(sc: Arc<Server>, context: SharedContext) -> impl Future<Item = u64, Error = io::Error> {
+        static GET_BODY: &[u8] = b"GET / HTTP/1.1\r\nHost: www.example.com\r\nConnection: close\r\nAccept: */*\r\n\r\n";
+
+        let addr = Address::DomainNameAddress("www.example.com".to_owned(), 80);
+
         let start = Instant::now();
-        let fut = ServerClient::connect(context, addr, sc.config.clone());
-        Timeout::new(fut, Duration::from_secs(5)).then(move |res| {
+
+        // Send HTTP GET and read the first byte
+        let fut = ServerClient::connect(context, addr, sc.config.clone()).and_then(|ServerClient { r, w }| {
+            w.write_all(GET_BODY)
+                .and_then(|(mut w, _)| w.flush())
+                .and_then(move |_| read_exact(r, [0u8, 1]))
+        });
+
+        Timeout::new(fut, Duration::from_secs(DEFAULT_CHECK_TIMEOUT_SEC)).then(move |res| {
             let elapsed = Instant::now() - start;
             let elapsed = elapsed.as_secs() * 1000 + u64::from(elapsed.subsec_millis()); // Converted to ms
             match res {
                 Ok(..) => {
-                    // Connected ... record its time
-                    debug!(
-                        "checked remote server {} connected with {} ms",
-                        sc.config.addr(),
-                        elapsed
-                    );
+                    // Got the result ... record its time
+                    debug!("checked remote server {} latency with {} ms", sc.config.addr(), elapsed);
                     Ok(elapsed)
                 }
                 Err(err) => {
@@ -140,8 +199,8 @@ impl Inner {
                         }
                         None => {
                             // Timeout
-                            error!(
-                                "checked remote server {} connect timeout, elapsed {} ms",
+                            debug!(
+                                "checked remote server {} latency timeout, elapsed {} ms",
                                 sc.config.addr(),
                                 elapsed
                             );
@@ -195,34 +254,25 @@ impl PingBalancer {
 
                 for (idx, svr) in inner.servers.iter().enumerate() {
                     let choosen_svr = &inner.servers[svr_idx];
-                    if svr.is_available() && (!choosen_svr.is_available() || svr.delay() < choosen_svr.delay()) {
+                    if svr.score() < choosen_svr.score() {
                         svr_idx = idx;
                     }
                 }
 
                 let choosen_svr = &inner.servers[svr_idx];
-                if svr_idx == 0 && !choosen_svr.is_available() {
-                    // Cannot find any usable servers, use the first one (svr_idx = 0)
-                    error!(
-                        "cannot find any usable servers, picked {} (delay: {} ms)",
-                        choosen_svr.config.addr(),
-                        choosen_svr.delay()
-                    );
-                } else {
-                    debug!(
-                        "chosen the best server {} (delay: {} ms)",
-                        choosen_svr.config.addr(),
-                        choosen_svr.delay()
-                    );
-                }
+                debug!(
+                    "chosen the best server {} (score: {})",
+                    choosen_svr.config.addr(),
+                    choosen_svr.score()
+                );
 
                 if inner.best_idx() != svr_idx {
                     info!(
-                        "switched server from {} (delay: {} ms) to {} (delay: {} ms)",
+                        "switched server from {} (score: {}) to {} (score: {})",
                         inner.best_server().config.addr(),
-                        inner.best_server().delay(),
+                        inner.best_server().score(),
                         choosen_svr.config.addr(),
-                        choosen_svr.delay(),
+                        choosen_svr.score(),
                     );
                 }
 

@@ -7,6 +7,8 @@ use crate::crypto::{cipher, CipherResult, CipherType, StreamCipher};
 use crate::crypto::CryptoMode;
 
 use bytes::{BufMut, BytesMut};
+#[cfg(feature = "camellia-cfb")]
+use openssl::nid::Nid;
 use openssl::symm;
 
 /// Core cipher of OpenSSL
@@ -18,24 +20,84 @@ pub struct OpenSSLCrypto {
 impl OpenSSLCrypto {
     /// Creates by type
     pub fn new(cipher_type: cipher::CipherType, key: &[u8], iv: &[u8], mode: CryptoMode) -> OpenSSLCrypto {
-        let t = match cipher_type {
-            #[cfg(feature = "aes-cfb")]
-            CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128(),
-            #[cfg(feature = "aes-cfb")]
-            CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1(),
-            #[cfg(feature = "aes-cfb")]
-            CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128(),
-            #[cfg(feature = "aes-cfb")]
-            CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128(),
-            #[cfg(feature = "aes-cfb")]
-            CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
-            #[cfg(feature = "aes-cfb")]
-            CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
+        let t =
+            match cipher_type {
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes128Cfb => symm::Cipher::aes_128_cfb128(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes128Cfb1 => symm::Cipher::aes_128_cfb1(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes192Cfb => symm::Cipher::aes_192_cfb128(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes192Cfb1 => symm::Cipher::aes_192_cfb1(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes192Cfb128 => symm::Cipher::aes_192_cfb128(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes256Cfb => symm::Cipher::aes_256_cfb128(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1(),
+                #[cfg(feature = "aes-cfb")]
+                CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128(),
 
-            #[cfg(feature = "rc4")]
-            CipherType::Rc4 => symm::Cipher::rc4(),
-            _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
-        };
+                #[cfg(feature = "aes-ctr")]
+                CipherType::Aes128Ctr => symm::Cipher::aes_128_ctr(),
+                #[cfg(feature = "aes-ctr")]
+                CipherType::Aes192Ctr => symm::Cipher::aes_192_ctr(),
+                #[cfg(feature = "aes-ctr")]
+                CipherType::Aes256Ctr => symm::Cipher::aes_256_ctr(),
+
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia128Cfb => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB128).expect("openssl doesn't support camellia-128-cfb")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia128Cfb1 => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB1).expect("openssl doesn't support camellia-128-cfb1")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia128Cfb8 => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB8).expect("openssl doesn't support camellia-128-cfb8")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia128Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB128)
+                    .expect("openssl doesn't support camellia-128-cfb128"),
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia192Cfb => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB128).expect("openssl doesn't support camellia-192-cfb")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia192Cfb1 => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB1).expect("openssl doesn't support camellia-192-cfb1")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia192Cfb8 => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB8).expect("openssl doesn't support camellia-192-cfb8")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia192Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB128)
+                    .expect("openssl doesn't support camellia-192-cfb128"),
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia256Cfb => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB128).expect("openssl doesn't support camellia-256-cfb")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia256Cfb1 => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB1).expect("openssl doesn't support camellia-256-cfb1")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia256Cfb8 => {
+                    symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB8).expect("openssl doesn't support camellia-256-cfb8")
+                }
+                #[cfg(feature = "camellia-cfb")]
+                CipherType::Camellia256Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB128)
+                    .expect("openssl doesn't support camellia-256-cfb128"),
+
+                #[cfg(feature = "rc4")]
+                CipherType::Rc4 => symm::Cipher::rc4(),
+                _ => panic!("Cipher type {:?} does not supported by OpenSSLCrypt yet", cipher_type),
+            };
 
         // Panic if error occurs
         let cipher = symm::Crypter::new(t, From::from(mode), key, Some(iv)).unwrap();
@@ -47,7 +109,7 @@ impl OpenSSLCrypto {
     }
 
     /// Update data
-    pub fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    pub fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         let least_reserved = data.len() + self.cipher.block_size();
         let mut buf = BytesMut::with_capacity(least_reserved); // NOTE: len() is 0 now!
         unsafe {
@@ -55,12 +117,12 @@ impl OpenSSLCrypto {
         }
         let length = self.inner.update(data, &mut *buf)?;
         buf.truncate(length);
-        out.put(buf);
+        out.put_slice(&buf);
         Ok(())
     }
 
     /// Generate the final block
-    pub fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
+    pub fn finalize(&mut self, out: &mut BufMut) -> CipherResult<()> {
         let least_reserved = self.cipher.block_size();
         let mut buf = BytesMut::with_capacity(least_reserved); // NOTE: len() is 0 now!
         unsafe {
@@ -69,7 +131,7 @@ impl OpenSSLCrypto {
 
         let length = self.inner.finalize(&mut *buf)?;
         buf.truncate(length);
-        out.put(buf);
+        out.put_slice(&buf);
         Ok(())
     }
 
@@ -123,11 +185,11 @@ impl OpenSSLCipher {
 unsafe impl Send for OpenSSLCipher {}
 
 impl StreamCipher for OpenSSLCipher {
-    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         self.worker.update(data, out)
     }
 
-    fn finalize<B: BufMut>(&mut self, out: &mut B) -> CipherResult<()> {
+    fn finalize(&mut self, out: &mut BufMut) -> CipherResult<()> {
         self.worker.finalize(out)
     }
 

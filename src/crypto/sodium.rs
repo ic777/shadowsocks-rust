@@ -7,25 +7,17 @@ use std::{
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-use libc::{c_ulonglong, uint32_t};
+use libc::c_ulonglong;
 use libsodium_ffi::{
-    crypto_aead_xchacha20poly1305_ietf_decrypt,
-    crypto_aead_xchacha20poly1305_ietf_encrypt,
-    crypto_stream_chacha20_ietf_xor_ic,
-    crypto_stream_chacha20_xor_ic,
-    crypto_stream_salsa20_xor_ic,
-    crypto_stream_xsalsa20_xor_ic,
-    sodium_init,
+    crypto_aead_xchacha20poly1305_ietf_decrypt, crypto_aead_xchacha20poly1305_ietf_encrypt,
+    crypto_stream_chacha20_ietf_xor_ic, crypto_stream_chacha20_xor_ic, crypto_stream_salsa20_xor_ic,
+    crypto_stream_xsalsa20_xor_ic, sodium_init,
 };
 
 use crate::crypto::{
     aead::{increase_nonce, make_skey},
     cipher::Error,
-    AeadDecryptor,
-    AeadEncryptor,
-    CipherResult,
-    CipherType,
-    StreamCipher,
+    AeadDecryptor, AeadEncryptor, CipherResult, CipherType, StreamCipher,
 };
 
 static SODIUM_INIT_FLAG: Once = ONCE_INIT;
@@ -64,7 +56,7 @@ impl SodiumStreamCipher {
         self.counter % SODIUM_BLOCK_SIZE
     }
 
-    fn process<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn process(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         let padding = self.padding_len();
 
         let mut plain_text = vec![0u8; data.len() + padding];
@@ -113,7 +105,7 @@ fn crypto_stream_xor_ic<B: BufMut>(
                 data.as_ptr(),
                 data.len() as c_ulonglong,
                 iv.as_ptr(),
-                ic as uint32_t,
+                ic as u32,
                 key.as_ptr(),
             ),
             CipherType::Salsa20 => crypto_stream_salsa20_xor_ic(
@@ -148,11 +140,11 @@ fn crypto_stream_xor_ic<B: BufMut>(
 }
 
 impl StreamCipher for SodiumStreamCipher {
-    fn update<B: BufMut>(&mut self, data: &[u8], out: &mut B) -> CipherResult<()> {
+    fn update(&mut self, data: &[u8], out: &mut BufMut) -> CipherResult<()> {
         self.process(data, out)
     }
 
-    fn finalize<B: BufMut>(&mut self, _: &mut B) -> CipherResult<()> {
+    fn finalize(&mut self, _: &mut BufMut) -> CipherResult<()> {
         Ok(())
     }
 

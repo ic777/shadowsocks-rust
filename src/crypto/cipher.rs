@@ -9,6 +9,8 @@ use std::{
 
 use crate::crypto::digest::{self, Digest, DigestType};
 use bytes::{BufMut, Bytes, BytesMut};
+#[cfg(feature = "camellia-cfb")]
+use openssl::nid::Nid;
 #[cfg(feature = "openssl")]
 use openssl::symm;
 use rand::{self, RngCore};
@@ -83,6 +85,15 @@ const CIPHER_AES_128_CFB_8: &str = "aes-128-cfb8";
 const CIPHER_AES_128_CFB_128: &str = "aes-128-cfb128";
 
 #[cfg(feature = "aes-cfb")]
+const CIPHER_AES_192_CFB: &str = "aes-192-cfb";
+#[cfg(feature = "aes-cfb")]
+const CIPHER_AES_192_CFB_1: &str = "aes-192-cfb1";
+#[cfg(feature = "aes-cfb")]
+const CIPHER_AES_192_CFB_8: &str = "aes-192-cfb8";
+#[cfg(feature = "aes-cfb")]
+const CIPHER_AES_192_CFB_128: &str = "aes-192-cfb128";
+
+#[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB: &str = "aes-256-cfb";
 #[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB_1: &str = "aes-256-cfb1";
@@ -90,6 +101,38 @@ const CIPHER_AES_256_CFB_1: &str = "aes-256-cfb1";
 const CIPHER_AES_256_CFB_8: &str = "aes-256-cfb8";
 #[cfg(feature = "aes-cfb")]
 const CIPHER_AES_256_CFB_128: &str = "aes-256-cfb128";
+
+#[cfg(feature = "aes-ctr")]
+const CIPHER_AES_128_CTR: &str = "aes-128-ctr";
+#[cfg(feature = "aes-ctr")]
+const CIPHER_AES_192_CTR: &str = "aes-192-ctr";
+#[cfg(feature = "aes-ctr")]
+const CIPHER_AES_256_CTR: &str = "aes-256-ctr";
+
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_128_CFB: &str = "camellia-128-cfb";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_192_CFB: &str = "camellia-192-cfb";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_256_CFB: &str = "camellia-256-cfb";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_128_CFB_1: &str = "camellia-128-cfb1";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_192_CFB_1: &str = "camellia-192-cfb1";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_256_CFB_1: &str = "camellia-256-cfb1";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_128_CFB_8: &str = "camellia-128-cfb8";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_192_CFB_8: &str = "camellia-192-cfb8";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_256_CFB_8: &str = "camellia-256-cfb8";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_128_CFB_128: &str = "camellia-128-cfb128";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_192_CFB_128: &str = "camellia-192-cfb128";
+#[cfg(feature = "camellia-cfb")]
+const CIPHER_CAMELLIA_256_CFB_128: &str = "camellia-256-cfb128";
 
 #[cfg(feature = "rc4")]
 const CIPHER_RC4: &str = "rc4";
@@ -136,6 +179,15 @@ pub enum CipherType {
     Aes128Cfb128,
 
     #[cfg(feature = "aes-cfb")]
+    Aes192Cfb,
+    #[cfg(feature = "aes-cfb")]
+    Aes192Cfb1,
+    #[cfg(feature = "aes-cfb")]
+    Aes192Cfb8,
+    #[cfg(feature = "aes-cfb")]
+    Aes192Cfb128,
+
+    #[cfg(feature = "aes-cfb")]
     Aes256Cfb,
     #[cfg(feature = "aes-cfb")]
     Aes256Cfb1,
@@ -143,6 +195,38 @@ pub enum CipherType {
     Aes256Cfb8,
     #[cfg(feature = "aes-cfb")]
     Aes256Cfb128,
+
+    #[cfg(feature = "aes-ctr")]
+    Aes128Ctr,
+    #[cfg(feature = "aes-ctr")]
+    Aes192Ctr,
+    #[cfg(feature = "aes-ctr")]
+    Aes256Ctr,
+
+    #[cfg(feature = "camellia-cfb")]
+    Camellia128Cfb,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia192Cfb,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia256Cfb,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia128Cfb1,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia192Cfb1,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia256Cfb1,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia128Cfb8,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia192Cfb8,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia256Cfb8,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia128Cfb128,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia192Cfb128,
+    #[cfg(feature = "camellia-cfb")]
+    Camellia256Cfb128,
 
     #[cfg(feature = "rc4")]
     Rc4,
@@ -193,11 +277,73 @@ impl CipherType {
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes128Cfb | CipherType::Aes128Cfb128 => symm::Cipher::aes_128_cfb128().key_len(),
             #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb1 => symm::Cipher::aes_192_cfb1().key_len(),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb8 => symm::Cipher::aes_192_cfb8().key_len(),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb | CipherType::Aes192Cfb128 => symm::Cipher::aes_192_cfb128().key_len(),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1().key_len(),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb8 => symm::Cipher::aes_256_cfb8().key_len(),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128().key_len(),
+
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes128Ctr => symm::Cipher::aes_128_ctr().key_len(),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes192Ctr => symm::Cipher::aes_192_ctr().key_len(),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes256Ctr => symm::Cipher::aes_256_ctr().key_len(),
+
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB128)
+                .expect("openssl doesn't support camellia-128-cfb")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb1 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB1)
+                .expect("openssl doesn't support camellia-128-cfb1")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb8 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB8)
+                .expect("openssl doesn't support camellia-128-cfb8")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB128)
+                .expect("openssl doesn't support camellia-128-cfb128")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB128)
+                .expect("openssl doesn't support camellia-192-cfb")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb1 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB1)
+                .expect("openssl doesn't support camellia-192-cfb1")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb8 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB8)
+                .expect("openssl doesn't support camellia-192-cfb8")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB128)
+                .expect("openssl doesn't support camellia-192-cfb128")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB128)
+                .expect("openssl doesn't support camellia-256-cfb")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb1 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB1)
+                .expect("openssl doesn't support camellia-256-cfb1")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb8 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB8)
+                .expect("openssl doesn't support camellia-256-cfb8")
+                .key_len(),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB128)
+                .expect("openssl doesn't support camellia-256-cfb128")
+                .key_len(),
 
             #[cfg(feature = "rc4")]
             CipherType::Rc4 | CipherType::Rc4Md5 => symm::Cipher::rc4().key_len(),
@@ -274,6 +420,18 @@ impl CipherType {
                 .iv_len()
                 .expect("iv_len should not be None"),
             #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb1 => symm::Cipher::aes_192_cfb1()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb8 => symm::Cipher::aes_192_cfb8()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb | CipherType::Aes192Cfb128 => symm::Cipher::aes_192_cfb128()
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => symm::Cipher::aes_256_cfb1()
                 .iv_len()
                 .expect("iv_len should not be None"),
@@ -283,6 +441,74 @@ impl CipherType {
                 .expect("iv_len should not be None"),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb | CipherType::Aes256Cfb128 => symm::Cipher::aes_256_cfb128()
+                .iv_len()
+                .expect("iv_len should not be None"),
+
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes128Ctr => symm::Cipher::aes_128_ctr().iv_len().expect("iv_len should not be None"),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes192Ctr => symm::Cipher::aes_192_ctr().iv_len().expect("iv_len should not be None"),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes256Ctr => symm::Cipher::aes_256_ctr().iv_len().expect("iv_len should not be None"),
+
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB128)
+                .expect("openssl doesn't support camellia-128-cfb")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb1 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB1)
+                .expect("openssl doesn't support camellia-128-cfb1")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb8 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB8)
+                .expect("openssl doesn't support camellia-128-cfb8")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_128_CFB128)
+                .expect("openssl doesn't support camellia-128-cfb128")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB128)
+                .expect("openssl doesn't support camellia-192-cfb")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb1 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB1)
+                .expect("openssl doesn't support camellia-192-cfb1")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb8 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB8)
+                .expect("openssl doesn't support camellia-192-cfb8")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_192_CFB128)
+                .expect("openssl doesn't support camellia-192-cfb128")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB128)
+                .expect("openssl doesn't support camellia-256-cfb")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb1 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB1)
+                .expect("openssl doesn't support camellia-256-cfb1")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb8 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB8)
+                .expect("openssl doesn't support camellia-256-cfb8")
+                .iv_len()
+                .expect("iv_len should not be None"),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb128 => symm::Cipher::from_nid(Nid::CAMELLIA_256_CFB128)
+                .expect("openssl doesn't support camellia-256-cfb128")
                 .iv_len()
                 .expect("iv_len should not be None"),
 
@@ -390,6 +616,15 @@ impl FromStr for CipherType {
             CIPHER_AES_128_CFB_128 => Ok(CipherType::Aes128Cfb128),
 
             #[cfg(feature = "aes-cfb")]
+            CIPHER_AES_192_CFB => Ok(CipherType::Aes192Cfb),
+            #[cfg(feature = "aes-cfb")]
+            CIPHER_AES_192_CFB_1 => Ok(CipherType::Aes192Cfb1),
+            #[cfg(feature = "aes-cfb")]
+            CIPHER_AES_192_CFB_8 => Ok(CipherType::Aes192Cfb8),
+            #[cfg(feature = "aes-cfb")]
+            CIPHER_AES_192_CFB_128 => Ok(CipherType::Aes192Cfb128),
+
+            #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB => Ok(CipherType::Aes256Cfb),
             #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB_1 => Ok(CipherType::Aes256Cfb1),
@@ -397,6 +632,38 @@ impl FromStr for CipherType {
             CIPHER_AES_256_CFB_8 => Ok(CipherType::Aes256Cfb8),
             #[cfg(feature = "aes-cfb")]
             CIPHER_AES_256_CFB_128 => Ok(CipherType::Aes256Cfb128),
+
+            #[cfg(feature = "aes-ctr")]
+            CIPHER_AES_128_CTR => Ok(CipherType::Aes128Ctr),
+            #[cfg(feature = "aes-ctr")]
+            CIPHER_AES_192_CTR => Ok(CipherType::Aes192Ctr),
+            #[cfg(feature = "aes-ctr")]
+            CIPHER_AES_256_CTR => Ok(CipherType::Aes256Ctr),
+
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_128_CFB => Ok(CipherType::Camellia128Cfb),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_128_CFB_1 => Ok(CipherType::Camellia128Cfb1),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_128_CFB_8 => Ok(CipherType::Camellia128Cfb8),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_128_CFB_128 => Ok(CipherType::Camellia128Cfb128),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_192_CFB => Ok(CipherType::Camellia192Cfb),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_192_CFB_1 => Ok(CipherType::Camellia192Cfb1),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_192_CFB_8 => Ok(CipherType::Camellia192Cfb8),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_192_CFB_128 => Ok(CipherType::Camellia192Cfb128),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_256_CFB => Ok(CipherType::Camellia256Cfb),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_256_CFB_1 => Ok(CipherType::Camellia256Cfb1),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_256_CFB_8 => Ok(CipherType::Camellia256Cfb8),
+            #[cfg(feature = "camellia-cfb")]
+            CIPHER_CAMELLIA_256_CFB_128 => Ok(CipherType::Camellia256Cfb128),
 
             #[cfg(feature = "rc4")]
             CIPHER_RC4 => Ok(CipherType::Rc4),
@@ -444,6 +711,15 @@ impl Display for CipherType {
             CipherType::Aes128Cfb128 => write!(f, "{}", CIPHER_AES_128_CFB_128),
 
             #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb => write!(f, "{}", CIPHER_AES_192_CFB),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb1 => write!(f, "{}", CIPHER_AES_192_CFB_1),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb8 => write!(f, "{}", CIPHER_AES_192_CFB_8),
+            #[cfg(feature = "aes-cfb")]
+            CipherType::Aes192Cfb128 => write!(f, "{}", CIPHER_AES_192_CFB_128),
+
+            #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb => write!(f, "{}", CIPHER_AES_256_CFB),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb1 => write!(f, "{}", CIPHER_AES_256_CFB_1),
@@ -451,6 +727,38 @@ impl Display for CipherType {
             CipherType::Aes256Cfb8 => write!(f, "{}", CIPHER_AES_256_CFB_8),
             #[cfg(feature = "aes-cfb")]
             CipherType::Aes256Cfb128 => write!(f, "{}", CIPHER_AES_256_CFB_128),
+
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes128Ctr => write!(f, "{}", CIPHER_AES_128_CTR),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes192Ctr => write!(f, "{}", CIPHER_AES_192_CTR),
+            #[cfg(feature = "aes-ctr")]
+            CipherType::Aes256Ctr => write!(f, "{}", CIPHER_AES_256_CTR),
+
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb => write!(f, "{}", CIPHER_CAMELLIA_128_CFB),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb1 => write!(f, "{}", CIPHER_CAMELLIA_128_CFB_1),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb8 => write!(f, "{}", CIPHER_CAMELLIA_128_CFB_8),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia128Cfb128 => write!(f, "{}", CIPHER_CAMELLIA_128_CFB_128),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb => write!(f, "{}", CIPHER_CAMELLIA_192_CFB),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb1 => write!(f, "{}", CIPHER_CAMELLIA_192_CFB_1),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb8 => write!(f, "{}", CIPHER_CAMELLIA_192_CFB_8),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia192Cfb128 => write!(f, "{}", CIPHER_CAMELLIA_192_CFB_128),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb => write!(f, "{}", CIPHER_CAMELLIA_256_CFB),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb1 => write!(f, "{}", CIPHER_CAMELLIA_256_CFB_1),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb8 => write!(f, "{}", CIPHER_CAMELLIA_256_CFB_8),
+            #[cfg(feature = "camellia-cfb")]
+            CipherType::Camellia256Cfb128 => write!(f, "{}", CIPHER_CAMELLIA_256_CFB_128),
 
             #[cfg(feature = "rc4")]
             CipherType::Rc4 => write!(f, "{}", CIPHER_RC4),
@@ -482,7 +790,7 @@ impl Display for CipherType {
 
 #[cfg(test)]
 mod test_cipher {
-    use crate::crypto::{new_stream, CipherType, CryptoMode, StreamCipher};
+    use crate::crypto::{new_stream, CipherType, CryptoMode};
 
     #[test]
     fn test_get_cipher() {
